@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 """
 Miscellaneous Routines.
 """
@@ -212,30 +212,6 @@ def matrix2str((a,b,c,d,e,f)):
     return '[%.2f,%.2f,%.2f,%.2f, (%.2f,%.2f)]' % (a,b,c,d,e,f)
 
 
-##  ObjIdRange
-##
-class ObjIdRange(object):
-
-    "A utility class to represent a range of object IDs."
-    
-    def __init__(self, start, nobjs):
-        self.start = start
-        self.nobjs = nobjs
-        return
-
-    def __repr__(self):
-        return '<ObjIdRange: %d-%d>' % (self.get_start_id(), self.get_end_id())
-
-    def get_start_id(self):
-        return self.start
-
-    def get_end_id(self):
-        return self.start + self.nobjs - 1
-
-    def get_nobjs(self):
-        return self.nobjs
-
-
 ##  Plane
 ##
 ##  A set-like data structure for objects placed on a plane.
@@ -245,13 +221,11 @@ class ObjIdRange(object):
 ##
 class Plane(object):
 
-    def __init__(self, objs=None, gridsize=50):
-        self._objs = []
+    def __init__(self, bbox, gridsize=50):
+        self._objs = set()
         self._grid = {}
         self.gridsize = gridsize
-        if objs is not None:
-            for obj in objs:
-                self.add(obj)
+        (self.x0, self.y0, self.x1, self.y1) = bbox
         return
 
     def __repr__(self):
@@ -267,9 +241,19 @@ class Plane(object):
         return obj in self._objs
 
     def _getrange(self, (x0,y0,x1,y1)):
+        x0 = max(self.x0, x0)
+        y0 = max(self.y0, y0)
+        x1 = min(self.x1, x1)
+        y1 = min(self.y1, y1)
         for y in drange(y0, y1, self.gridsize):
             for x in drange(x0, x1, self.gridsize):
                 yield (x,y)
+        return
+
+    # extend(objs)
+    def extend(self, objs):
+        for obj in objs:
+            self.add(obj)
         return
     
     # add(obj): place an object.
@@ -281,7 +265,7 @@ class Plane(object):
             else:
                 r = self._grid[k]
             r.append(obj)
-        self._objs.append(obj)
+        self._objs.add(obj)
         return
 
     # remove(obj): displace an object.

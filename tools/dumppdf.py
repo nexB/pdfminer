@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 #
 # dumppdf.py - dump pdf contents in XML format.
 #
@@ -6,10 +6,13 @@
 #  options:
 #    -i objid : object id
 #
-import sys, re
-from pdfminer.psparser import PSKeyword, PSLiteral
-from pdfminer.pdfparser import PDFDocument, PDFParser, PDFNoOutlines
+import sys, os.path, re
+from pdfminer.psparser import PSKeyword, PSLiteral, LIT
+from pdfminer.pdfparser import PDFParser
+from pdfminer.pdfdocument import PDFDocument, PDFNoOutlines
+from pdfminer.pdftypes import PDFObjectNotFound, PDFValueError
 from pdfminer.pdftypes import PDFStream, PDFObjRef, resolve1, stream_value
+from pdfminer.pdfpage import PDFPage
 
 
 ESC_PAT = re.compile(r'[\000-\037&<>()"\042\047\134\177-\377]')
@@ -97,22 +100,21 @@ def dumpallobjs(out, doc, codec=None):
                 out.write('<object id="%d">\n' % objid)
                 dumpxml(out, obj, codec=codec)
                 out.write('\n</object>\n\n')
-            except:
-                raise
+            except PDFObjectNotFound, e:
+                print >>sys.stderr, 'not found: %r' % e
     dumptrailers(out, doc)
     out.write('</pdf>')
     return
 
 # dumpoutline
 def dumpoutline(outfp, fname, objids, pagenos, password='',
-                dumpall=False, codec=None):
-    doc = PDFDocument()
+                dumpall=False, codec=None, extractdir=None):
     fp = file(fname, 'rb')
     parser = PDFParser(fp)
-    parser.set_document(doc)
-    doc.set_parser(parser)
+    doc = PDFDocument(parser)
     doc.initialize(password)
-    pages = dict( (page.pageid, pageno) for (pageno,page) in enumerate(doc.get_pages()) )
+    pages = dict( (page.pageid, pageno) for (pageno,page)
+                  in enumerate(PDFPage.create_pages(doc)) )
     def resolve_dest(dest):
         if isinstance(dest, str):
             dest = resolve1(doc.get_dest(dest))
@@ -152,21 +154,57 @@ def dumpoutline(outfp, fname, objids, pagenos, password='',
     fp.close()
     return
 
-# dumppdf
-def dumppdf(outfp, fname, objids, pagenos, password='',
-            dumpall=False, codec=None):
-    doc = PDFDocument()
+# extractembedded
+LITERAL_FILESPEC = LIT('Filespec')
+LITERAL_EMBEDDEDFILE = LIT('EmbeddedFile')
+def extractembedded(outfp, fname, objids, pagenos, password='',
+                    dumpall=False, codec=None, extractdir=None):
+    def extract1(obj):
+        filename = os.path.basename(obj['UF'] or obj['F'])
+        fileref = obj['EF']['F']
+        fileobj = doc.getobj(fileref.objid)
+        if not isinstance(fileobj, PDFStream):
+            raise PDFValueError(
+                'unable to process PDF: reference for %r is not a PDFStream' %
+                (filename))
+        if fileobj.get('Type') is not LITERAL_EMBEDDEDFILE:
+            raise PDFValueError(
+                'unable to process PDF: reference for %r is not an EmbeddedFile' %
+                (filename))
+        path = os.path.join(extractdir, filename)
+        if os.path.exists(path):
+            raise IOError('file exists: %r' % path)
+        print >>sys.stderr, 'extracting: %r' % path
+        out = file(path, 'wb')
+        out.write(fileobj.get_data())
+        out.close()
+        return
+    
     fp = file(fname, 'rb')
     parser = PDFParser(fp)
-    parser.set_document(doc)
-    doc.set_parser(parser)
+    doc = PDFDocument(parser)
+    doc.initialize(password)
+
+    for xref in doc.xrefs:
+        for objid in xref.get_objids():
+            obj = doc.getobj(objid)
+            if isinstance(obj, dict) and obj.get('Type') is LITERAL_FILESPEC:
+                extract1(obj)
+    return
+
+# dumppdf
+def dumppdf(outfp, fname, objids, pagenos, password='',
+            dumpall=False, codec=None, extractdir=None):
+    fp = file(fname, 'rb')
+    parser = PDFParser(fp)
+    doc = PDFDocument(parser)
     doc.initialize(password)
     if objids:
         for objid in objids:
             obj = doc.getobj(objid)
             dumpxml(outfp, obj, codec=codec)
     if pagenos:
-        for (pageno,page) in enumerate(doc.get_pages()):
+        for (pageno,page) in enumerate(PDFPage.create_pages(doc)):
             if pageno in pagenos:
                 if codec:
                     for obj in page.contents:
@@ -188,10 +226,10 @@ def dumppdf(outfp, fname, objids, pagenos, password='',
 def main(argv):
     import getopt
     def usage():
-        print 'usage: %s [-d] [-a] [-p pageid] [-P password] [-r|-b|-t] [-T] [-i objid] file ...' % argv[0]
+        print 'usage: %s [-d] [-a] [-p pageid] [-P password] [-r|-b|-t] [-T] [-E directory] [-i objid] file ...' % argv[0]
         return 100
     try:
-        (opts, args) = getopt.getopt(argv[1:], 'dap:P:rbtTi:')
+        (opts, args) = getopt.getopt(argv[1:], 'dap:P:rbtTE:i:')
     except getopt.GetoptError:
         return usage()
     if not args: return usage()
@@ -203,8 +241,10 @@ def main(argv):
     dumpall = False
     proc = dumppdf
     outfp = sys.stdout
+    extractdir = None
     for (k, v) in opts:
         if k == '-d': debug += 1
+        elif k == '-o': outfp = file(v, 'wb')
         elif k == '-i': objids.extend( int(x) for x in v.split(',') )
         elif k == '-p': pagenos.update( int(x)-1 for x in v.split(',') )
         elif k == '-P': password = v
@@ -213,14 +253,16 @@ def main(argv):
         elif k == '-b': codec = 'binary'
         elif k == '-t': codec = 'text'
         elif k == '-T': proc = dumpoutline
-        elif k == '-o': outfp = file(v, 'wb')
+        elif k == '-E':
+            extractdir = v
+            proc = extractembedded
     #
     PDFDocument.debug = debug
     PDFParser.debug = debug
     #
     for fname in args:
         proc(outfp, fname, objids, pagenos, password=password,
-             dumpall=dumpall, codec=codec)
+             dumpall=dumpall, codec=codec, extractdir=extractdir)
     return
 
 if __name__ == '__main__': sys.exit(main(sys.argv))

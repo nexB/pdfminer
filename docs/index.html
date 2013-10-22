@@ -9,7 +9,7 @@
 
 <div align=right class=lastmod>
 <!-- hhmts start -->
-Last Modified: Sat May 14 16:33:16 UTC 2011
+Last Modified: Tue Oct 22 15:16:49 UTC 2013
 <!-- hhmts end -->
 </div>
 
@@ -139,7 +139,7 @@ In order to process CJK languages, you need an additional step to take
 during installation:
 <blockquote><pre>
 # <strong>make cmap</strong>
-python tools/conv_cmap.py pdfminer/cmap Adobe-CNS1 cmaprsrc/cid2code_Adobe_CNS1.txt cp950 big5
+python tools/conv_cmap.py pdfminer/cmap Adobe-CNS1 cmaprsrc/cid2code_Adobe_CNS1.txt
 reading 'cmaprsrc/cid2code_Adobe_CNS1.txt'...
 writing 'CNS1_H.py'...
 ...
@@ -152,10 +152,11 @@ writing 'CNS1_H.py'...
 On Windows machines which don't have <code>make</code> command, 
 paste the following commands on a command line prompt:
 <blockquote><pre>
-<strong>python tools\conv_cmap.py pdfminer\cmap Adobe-CNS1 cmaprsrc\cid2code_Adobe_CNS1.txt cp950 big5</strong>
-<strong>python tools\conv_cmap.py pdfminer\cmap Adobe-GB1 cmaprsrc\cid2code_Adobe_GB1.txt cp936 gb2312</strong>
-<strong>python tools\conv_cmap.py pdfminer\cmap Adobe-Japan1 cmaprsrc\cid2code_Adobe_Japan1.txt cp932 euc-jp</strong>
-<strong>python tools\conv_cmap.py pdfminer\cmap Adobe-Korea1 cmaprsrc\cid2code_Adobe_Korea1.txt cp949 euc-kr</strong>
+<strong>mkdir pdfminer\cmap</strong>
+<strong>python tools\conv_cmap.py -c B5=cp950 -c UniCNS-UTF8=utf-8 pdfminer\cmap Adobe-CNS1 cmaprsrc\cid2code_Adobe_CNS1.txt</strong>
+<strong>python tools\conv_cmap.py -c GBK-EUC=cp936 -c UniGB-UTF8=utf-8 pdfminer\cmap Adobe-GB1 cmaprsrc\cid2code_Adobe_GB1.txt</strong>
+<strong>python tools\conv_cmap.py -c RKSJ=cp932 -c EUC=euc-jp -c UniJIS-UTF8=utf-8 pdfminer\cmap Adobe-Japan1 cmaprsrc\cid2code_Adobe_Japan1.txt</strong>
+<strong>python tools\conv_cmap.py -c KSC-EUC=euc-kr -c KSC-Johab=johab -c KSCms-UHC=cp949 -c UniKS-UTF8=utf-8 pdfminer\cmap Adobe-Korea1 cmaprsrc\cid2code_Adobe_Korea1.txt</strong>
 <strong>python setup.py install</strong>
 </pre></blockquote>
 
@@ -352,6 +353,9 @@ no stream header is displayed for the ease of saving it to a file.
 <dt> <code>-T</code> 
 <dd> Shows the table of contents.
 <p>
+<dt> <code>-E <em>directory</em></code> 
+<dd> Extracts embedded files from the pdf into the given directory.
+<p>
 <dt> <code>-P <em>password</em></code> 
 <dd> Provides the user password to access PDF contents.
 <p>
@@ -361,12 +365,14 @@ no stream header is displayed for the ease of saving it to a file.
 
 <h2><a name="changes">Changes</a></h2>
 <ul>
-<li> 2010/05/15: Speed improvements for layout analysis.
-<li> 2010/05/15: API changes. <code>LTText.get_text()</code> is added.
-<li> 2010/04/20: API changes. LTPolygon class was renamed as LTCurve.
-<li> 2010/04/20: LTLine now represents horizontal/vertical lines only. Thanks to Koji Nakagawa.
-<li> 2010/03/07: Documentation improvements by Jakub Wilk. Memory usage patch by Jonathan Hunt.
-<li> 2010/02/27: Bugfixes and layout analysis improvements. Thanks to fujimoto.report.
+<li> 2013/10/22: Sudden resurge of interests. 
+Incorporated a lot of patches and robust handling of broken PDFs.
+<li> 2011/05/15: Speed improvements for layout analysis.
+<li> 2011/05/15: API changes. <code>LTText.get_text()</code> is added.
+<li> 2011/04/20: API changes. LTPolygon class was renamed as LTCurve.
+<li> 2011/04/20: LTLine now represents horizontal/vertical lines only. Thanks to Koji Nakagawa.
+<li> 2011/03/07: Documentation improvements by Jakub Wilk. Memory usage patch by Jonathan Hunt.
+<li> 2011/02/27: Bugfixes and layout analysis improvements. Thanks to fujimoto.report.
 <li> 2010/12/26: A couple of bugfixes and minor improvements. Thanks to Kevin Brubeck Unhammer and Daniel Gerber.
 <li> 2010/10/17: A couple of bugfixes and minor improvements. Thanks to standardabweichung and Alastair Irving.
 <li> 2010/09/07: A minor bugfix. Thanks to Alexander Garden.

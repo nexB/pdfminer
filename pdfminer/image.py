@@ -1,9 +1,11 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
+import cStringIO
+import logging
 import sys
 import struct
 import os, os.path
 from pdftypes import LITERALS_DCT_DECODE
-from pdfcolor import LITERAL_DEVICE_GRAY, LITERAL_DEVICE_RGB
+from pdfcolor import LITERAL_DEVICE_GRAY, LITERAL_DEVICE_RGB, LITERAL_DEVICE_CMYK
 
 def align32(x):
     return ((x+3)/4)*4
@@ -77,7 +79,17 @@ class ImageWriter(object):
         path = os.path.join(self.outdir, name)
         fp = file(path, 'wb')
         if ext == '.jpg':
-            fp.write(stream.get_rawdata())
+            raw_data = stream.get_rawdata()
+            if LITERAL_DEVICE_CMYK in image.colorspace:
+                from PIL import Image
+                from PIL import ImageChops
+                ifp = cStringIO.StringIO(raw_data)
+                i = Image.open(ifp) 
+                i = ImageChops.invert(i)
+                i = i.convert('RGB')
+                i.save(fp, 'JPEG')
+            else:
+                fp.write(raw_data)
         elif image.bits == 1:
             bmp = BMPWriter(fp, 1, width, height)
             data = stream.get_data()

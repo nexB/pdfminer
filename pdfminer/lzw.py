@@ -1,9 +1,13 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 import sys
 try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+
+
+class CorruptDataError(Exception):
+    pass
 
 
 ##  LZWDecoder
@@ -60,10 +64,12 @@ class LZWDecoder(object):
         else:
             if code < len(self.table):
                 x = self.table[code]
-                self.table.append(self.prevbuf+x[0])
-            else:
-                self.table.append(self.prevbuf+self.prevbuf[0])
+                self.table.append(self.prevbuf+x[:1])
+            elif code == len(self.table):
+                self.table.append(self.prevbuf+self.prevbuf[:1])
                 x = self.table[code]
+            else:
+                raise CorruptDataError
             l = len(self.table)
             if l == 511:
                 self.nbits = 10
@@ -80,7 +86,11 @@ class LZWDecoder(object):
                 code = self.readbits(self.nbits)
             except EOFError:
                 break
-            x = self.feed(code)
+            try:
+                x = self.feed(code)
+            except CorruptDataError:
+                # just ignore corrupt data and stop yielding there
+                break
             yield x
             if self.debug:
                 print >>sys.stderr, ('nbits=%d, code=%d, output=%r, table=%r' %

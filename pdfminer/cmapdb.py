@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 """ Adobe character mapping (CMap) support.
 
@@ -286,7 +286,8 @@ class CMapParser(PSStackParser):
     def __init__(self, cmap, fp):
         PSStackParser.__init__(self, fp)
         self.cmap = cmap
-        self._in_cmap = False
+        # some ToUnicode maps don't have "begincmap" keyword.
+        self._in_cmap = True
         return
 
     def run(self):

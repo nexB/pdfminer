@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 import sys
 import re
 try:
@@ -17,8 +17,9 @@ from pdftypes import str_value, list_value, dict_value, stream_value
 from pdffont import PDFFontError
 from pdffont import PDFType1Font, PDFTrueTypeFont, PDFType3Font
 from pdffont import PDFCIDFont
-from pdfparser import PDFDocument, PDFParser
-from pdfparser import PDFPasswordIncorrect
+from pdfparser import PDFParser
+from pdfdocument import PDFDocument
+from pdfdocument import PDFPasswordIncorrect
 from pdfcolor import PDFColorSpace
 from pdfcolor import PREDEFINED_COLORSPACE
 from pdfcolor import LITERAL_DEVICE_GRAY, LITERAL_DEVICE_RGB
@@ -629,10 +630,9 @@ class PDFPageInterpreter(object):
         try:
             self.textstate.font = self.fontmap[literal_name(fontid)]
         except KeyError:
-            raise
             if STRICT:
                 raise PDFInterpreterError('Undefined Font id: %r' % fontid)
-            return
+            self.textstate.font = self.rsrcmgr.get_font(None, {})
         self.textstate.fontsize = fontsize
         return
     # setrendering
@@ -803,32 +803,3 @@ class PDFPageInterpreter(object):
             else:
                 self.push(obj)
         return
-
-
-##  process_pdf
-##
-class PDFTextExtractionNotAllowed(PDFInterpreterError): pass
-
-def process_pdf(rsrcmgr, device, fp, pagenos=None, maxpages=0, password='',
-                caching=True, check_extractable=True):
-    # Create a PDF parser object associated with the file object.
-    parser = PDFParser(fp)
-    # Create a PDF document object that stores the document structure.
-    doc = PDFDocument(caching=caching)
-    # Connect the parser and document objects.
-    parser.set_document(doc)
-    doc.set_parser(parser)
-    # Supply the document password for initialization.
-    # (If no password is set, give an empty string.)
-    doc.initialize(password)
-    # Check if the document allows text extraction. If not, abort.
-    if check_extractable and not doc.is_extractable:
-        raise PDFTextExtractionNotAllowed('Text extraction is not allowed: %r' % fp)
-    # Create a PDF interpreter object.
-    interpreter = PDFPageInterpreter(rsrcmgr, device)
-    # Process each page contained in the document.
-    for (pageno,page) in enumerate(doc.get_pages()):
-        if pagenos and (pageno not in pagenos): continue
-        interpreter.process_page(page)
-        if maxpages and maxpages <= pageno+1: break
-    return
