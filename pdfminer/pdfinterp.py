@@ -29,7 +29,6 @@ from utils import mult_matrix, MATRIX_IDENTITY
 class PDFResourceError(PDFException):
     pass
 
-
 class PDFInterpreterError(PDFException):
     pass
 
@@ -313,7 +312,7 @@ class PDFPageInterpreter(object):
         return
 
     def dup(self):
-        return PDFPageInterpreter(self.rsrcmgr, self.device)
+        return self.__class__(self.rsrcmgr, self.device)
 
     # init_resources(resources):
     #   Prepare the fonts and XObjects listed in the Resource attribute.
@@ -554,12 +553,20 @@ class PDFPageInterpreter(object):
 
     # setcolorspace-stroking
     def do_CS(self, name):
-        self.scs = self.csmap[literal_name(name)]
+        try:
+            self.scs = self.csmap[literal_name(name)]
+        except KeyError:
+            if STRICT:
+                raise PDFInterpreterError('Undefined ColorSpace: %r' % name)
         return
 
     # setcolorspace-non-strokine
     def do_cs(self, name):
-        self.ncs = self.csmap[literal_name(name)]
+        try:
+            self.ncs = self.csmap[literal_name(name)]
+        except KeyError:
+            if STRICT:
+                raise PDFInterpreterError('Undefined ColorSpace: %r' % name)
         return
 
     # setgray-stroking

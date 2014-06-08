@@ -6,6 +6,14 @@ try:
     import hashlib as md5
 except ImportError:
     import md5
+try:
+    from Crypto.Cipher import ARC4
+    from Crypto.Cipher import AES
+    from Crypto.Hash import SHA256
+except ImportError:
+    AES = SHA256 = None
+    import arcfour as ARC4
+
 from psparser import PSEOF
 from psparser import literal_name
 from psparser import LIT, KWD, STRICT
@@ -16,7 +24,6 @@ from pdftypes import int_value
 from pdftypes import str_value, list_value, dict_value, stream_value
 from pdfparser import PDFSyntaxError
 from pdfparser import PDFStreamParser
-from arcfour import Arcfour
 from utils import choplist, nunpack
 from utils import decode_text
 
@@ -26,20 +33,19 @@ from utils import decode_text
 class PDFNoValidXRef(PDFSyntaxError):
     pass
 
-
 class PDFNoOutlines(PDFException):
     pass
-
 
 class PDFDestinationNotFound(PDFException):
     pass
 
-
 class PDFEncryptionError(PDFException):
     pass
 
-
 class PDFPasswordIncorrect(PDFEncryptionError):
+    pass
+
+class PDFTextExtractionNotAllowed(PDFEncryptionError):
     pass
 
 # some predefined literals and keywords.
@@ -190,6 +196,7 @@ class PDFXRefFallback(PDFXRef):
                         objs.append(obj)
                 except PSEOF:
                     pass
+                n = min(n, len(objs)//2)
                 for index in xrange(n):
                     objid1 = objs[index*2]
                     self.offsets[objid1] = (objid, index, 0)
@@ -218,7 +225,7 @@ class PDFXRefStream(PDFBaseXRef):
         if not isinstance(stream, PDFStream) or stream['Type'] is not LITERAL_XREF:
             raise PDFNoValidXRef('Invalid PDF stream spec.')
         size = stream['Size']
-        index_array = stream.get('Index', (1, size))
+        index_array = stream.get('Index', (0, size))
         if len(index_array) % 2 != 0:
             raise PDFSyntaxError('Invalid index number')
         self.ranges.extend(choplist(2, index_array))
@@ -238,7 +245,11 @@ class PDFXRefStream(PDFBaseXRef):
     def get_objids(self):
         for (start, nobjs) in self.ranges:
             for i in xrange(nobjs):
-                yield start+i
+                offset = self.entlen * i
+                ent = self.data[offset:offset+self.entlen]
+                f1 = nunpack(ent[:self.fl1], 1)
+                if f1 == 1 or f1 == 2:
+                    yield start+i
         return
 
     def get_pos(self, objid):
@@ -246,6 +257,7 @@ class PDFXRefStream(PDFBaseXRef):
         for (start, nobjs) in self.ranges:
             if start <= objid and objid < start+nobjs:
                 index += objid - start
+                break
             else:
                 index += nobjs
         else:
@@ -264,6 +276,217 @@ class PDFXRefStream(PDFBaseXRef):
             raise KeyError(objid)
 
 
+##  PDFSecurityHandler
+##
+class PDFStandardSecurityHandler(object):
+
+    PASSWORD_PADDING = '(\xbfN^Nu\x8aAd\x00NV\xff\xfa\x01\x08..\x00\xb6\xd0h>\x80/\x0c\xa9\xfedSiz'
+    supported_revisions = (2, 3)
+
+    def __init__(self, docid, param, password=''):
+        self.docid = docid
+        self.param = param
+        self.password = password
+        self.init()
+
+    def init(self):
+        self.init_params()
+        if self.r not in self.supported_revisions:
+            raise PDFEncryptionError('Unsupported revision: param=%r' % self.param)
+        self.init_key()
+
+    def init_params(self):
+        self.v = int_value(self.param.get('V', 0))
+        self.r = int_value(self.param['R'])
+        self.p = int_value(self.param['P'])
+        self.o = str_value(self.param['O'])
+        self.u = str_value(self.param['U'])
+        self.length = int_value(self.param.get('Length', 40))
+
+    def init_key(self):
+        self.key = self.authenticate(self.password)
+        if self.key is None:
+            raise PDFPasswordIncorrect
+
+    def is_printable(self):
+        return bool(self.p & 4)
+
+    def is_modifiable(self):
+        return bool(self.p & 8)
+
+    def is_extractable(self):
+        return bool(self.p & 16)
+
+    def compute_u(self, key):
+        if self.r == 2:
+            # Algorithm 3.4
+            return ARC4.new(key).encrypt(self.PASSWORD_PADDING)  # 2
+        else:
+            # Algorithm 3.5
+            hash = md5.md5(self.PASSWORD_PADDING)  # 2
+            hash.update(self.docid[0])  # 3
+            result = ARC4.new(key).encrypt(hash.digest())  # 4
+            for i in range(1, 20):  # 5
+                k = ''.join(chr(ord(c) ^ i) for c in key)
+                result = ARC4.new(k).encrypt(result)
+            result += result  # 6
+            return result
+
+    def compute_encryption_key(self, password):
+        # Algorithm 3.2
+        password = (password + self.PASSWORD_PADDING)[:32]  # 1
+        hash = md5.md5(password)  # 2
+        hash.update(self.o)  # 3
+        hash.update(struct.pack('<l', self.p))  # 4
+        hash.update(self.docid[0])  # 5
+        if self.r >= 4:
+            if not self.encrypt_metadata:
+                hash.update('\xff\xff\xff\xff')
+        result = hash.digest()
+        n = 5
+        if self.r >= 3:
+            n = self.length // 8
+            for _ in range(50):
+                result = md5.md5(result[:n]).digest()
+        return result[:n]
+
+    def authenticate(self, password):
+        key = self.authenticate_user_password(password)
+        if key is None:
+            key = self.authenticate_owner_password(password)
+        return key
+
+    def authenticate_user_password(self, password):
+        key = self.compute_encryption_key(password)
+        if self.verify_encryption_key(key):
+            return key
+
+    def verify_encryption_key(self, key):
+        # Algorithm 3.6
+        u = self.compute_u(key)
+        if self.r == 2:
+            return u == self.u
+        return u[:16] == self.u[:16]
+
+    def authenticate_owner_password(self, password):
+        # Algorithm 3.7
+        password = (password + self.PASSWORD_PADDING)[:32]
+        hash = md5.md5(password)
+        if self.r >= 3:
+            for _ in range(50):
+                hash = md5.md5(hash.digest())
+        n = 5
+        if self.r >= 3:
+            n = self.length // 8
+        key = hash.digest()[:n]
+        if self.r == 2:
+            user_password = ARC4.new(key).decrypt(self.o)
+        else:
+            user_password = self.o
+            for i in range(19, -1, -1):
+                k = ''.join(chr(ord(c) ^ i) for c in key)
+                user_password = ARC4.new(k).decrypt(user_password)
+        return self.authenticate_user_password(user_password)
+
+    def decrypt(self, objid, genno, data, attrs=None):
+        return self.decrypt_rc4(objid, genno, data)
+
+    def decrypt_rc4(self, objid, genno, data):
+        key = self.key + struct.pack('<L', objid)[:3] + struct.pack('<L', genno)[:2]
+        hash = md5.md5(key)
+        key = hash.digest()[:min(len(key), 16)]
+        return ARC4.new(key).decrypt(data)
+
+
+class PDFStandardSecurityHandlerV4(PDFStandardSecurityHandler):
+
+    supported_revisions = (4,)
+
+    def init_params(self):
+        super(PDFStandardSecurityHandlerV4, self).init_params()
+        self.length = 128
+        self.cf = dict_value(self.param.get('CF'))
+        self.stmf = literal_name(self.param['StmF'])
+        self.strf = literal_name(self.param['StrF'])
+        self.encrypt_metadata = bool(self.param.get('EncryptMetadata', True))
+        if self.stmf != self.strf:
+            raise PDFEncryptionError('Unsupported crypt filter: param=%r' % self.param)
+        self.cfm = {}
+        for k, v in self.cf.items():
+            f = self.get_cfm(literal_name(v['CFM']))
+            if f is None:
+                raise PDFEncryptionError('Unknown crypt filter method: param=%r' % self.param)
+            self.cfm[k] = f
+        self.cfm['Identity'] = self.decrypt_identity
+        if self.strf not in self.cfm:
+            raise PDFEncryptionError('Undefined crypt filter: param=%r' % self.param)
+
+    def get_cfm(self, name):
+        if name == 'V2':
+            return self.decrypt_rc4
+        elif name == 'AESV2':
+            return self.decrypt_aes128
+
+    def decrypt(self, objid, genno, data, attrs=None, name=None):
+        if not self.encrypt_metadata and attrs is not None:
+            t = attrs.get('Type')
+            if t is not None and literal_name(t) == 'Metadata':
+                return data
+        if name is None:
+            name = self.strf
+        return self.cfm[name](objid, genno, data)
+
+    def decrypt_identity(self, objid, genno, data):
+        return data
+
+    def decrypt_aes128(self, objid, genno, data):
+        key = self.key + struct.pack('<L', objid)[:3] + struct.pack('<L', genno)[:2] + "sAlT"
+        hash = md5.md5(key)
+        key = hash.digest()[:min(len(key), 16)]
+        return AES.new(key, mode=AES.MODE_CBC, IV=data[:16]).decrypt(data[16:])
+
+
+class PDFStandardSecurityHandlerV5(PDFStandardSecurityHandlerV4):
+
+    supported_revisions = (5,)
+
+    def init_params(self):
+        super(PDFStandardSecurityHandlerV5, self).init_params()
+        self.length = 256
+        self.oe = str_value(self.param['OE'])
+        self.ue = str_value(self.param['UE'])
+        self.o_hash = self.o[:32]
+        self.o_validation_salt = self.o[32:40]
+        self.o_key_salt = self.o[40:]
+        self.u_hash = self.u[:32]
+        self.u_validation_salt = self.u[32:40]
+        self.u_key_salt = self.u[40:]
+
+    def get_cfm(self, name):
+        if name == 'AESV3':
+            return self.decrypt_aes256
+
+    def authenticate(self, password):
+        password = password.encode('utf-8')[:127]
+        hash = SHA256.new(password)
+        hash.update(self.o_validation_salt)
+        hash.update(self.u)
+        if hash.digest() == self.o_hash:
+            hash = SHA256.new(password)
+            hash.update(self.o_key_salt)
+            hash.update(self.u)
+            return AES.new(hash.digest(), mode=AES.MODE_CBC, IV='\x00' * 16).decrypt(self.oe)
+        hash = SHA256.new(password)
+        hash.update(self.u_validation_salt)
+        if hash.digest() == self.u_hash:
+            hash = SHA256.new(password)
+            hash.update(self.u_key_salt)
+            return AES.new(hash.digest(), mode=AES.MODE_CBC, IV='\x00' * 16).decrypt(self.ue)
+
+    def decrypt_aes256(self, objid, genno, data):
+        return AES.new(self.key, mode=AES.MODE_CBC, IV=data[:16]).decrypt(data[16:])
+
+
 ##  PDFDocument
 ##
 class PDFDocument(object):
@@ -275,15 +498,22 @@ class PDFDocument(object):
     dynamically import the data as processing goes.
 
     Typical usage:
-      doc = PDFDocument(parser)
-      doc.initialize(password)
+      doc = PDFDocument(parser, password)
       obj = doc.getobj(objid)
 
     """
 
+    security_handler_registry = {
+        1: PDFStandardSecurityHandler,
+        2: PDFStandardSecurityHandler,
+    }
+    if AES is not None:
+        security_handler_registry[4] = PDFStandardSecurityHandlerV4
+        if SHA256 is not None:
+            security_handler_registry[5] = PDFStandardSecurityHandlerV5
     debug = 0
 
-    def __init__(self, parser, caching=True, fallback=True):
+    def __init__(self, parser, password='', caching=True, fallback=True):
         "Set the document to use a given PDFParser object."
         self.caching = caching
         self.xrefs = []
@@ -296,6 +526,7 @@ class PDFDocument(object):
         self._parsed_objs = {}
         self._parser = parser
         self._parser.set_document(self)
+        self.is_printable = self.is_modifiable = self.is_extractable = True
         # Retrieve the information of each header that was appended
         # (maybe multiple times) at the end of the document.
         try:
@@ -317,6 +548,7 @@ class PDFDocument(object):
                 #assert not self.encryption
                 self.encryption = (list_value(trailer['ID']),
                                    dict_value(trailer['Encrypt']))
+                self._initialize_password(password)
             if 'Info' in trailer:
                 self.info.append(dict_value(trailer['Info']))
             if 'Root' in trailer:
@@ -330,73 +562,23 @@ class PDFDocument(object):
                 raise PDFSyntaxError('Catalog not found!')
         return
 
-    # initialize(password='')
+    # _initialize_password(password='')
     #   Perform the initialization with a given password.
-    #   This step is mandatory even if there's no password associated
-    #   with the document.
-    PASSWORD_PADDING = '(\xbfN^Nu\x8aAd\x00NV\xff\xfa\x01\x08..\x00\xb6\xd0h>\x80/\x0c\xa9\xfedSiz'
-
-    def initialize(self, password=''):
-        if not self.encryption:
-            self.is_printable = self.is_modifiable = self.is_extractable = True
-            return
+    def _initialize_password(self, password=''):
         (docid, param) = self.encryption
         if literal_name(param.get('Filter')) != 'Standard':
             raise PDFEncryptionError('Unknown filter: param=%r' % param)
-        V = int_value(param.get('V', 0))
-        if not (V == 1 or V == 2):
+        v = int_value(param.get('V', 0))
+        factory = self.security_handler_registry.get(v)
+        if factory is None:
             raise PDFEncryptionError('Unknown algorithm: param=%r' % param)
-        length = int_value(param.get('Length', 40))  # Key length (bits)
-        O = str_value(param['O'])
-        R = int_value(param['R'])  # Revision
-        if 5 <= R:
-            raise PDFEncryptionError('Unknown revision: %r' % R)
-        U = str_value(param['U'])
-        P = int_value(param['P'])
-        self.is_printable = bool(P & 4)
-        self.is_modifiable = bool(P & 8)
-        self.is_extractable = bool(P & 16)
-        # Algorithm 3.2
-        password = (password+self.PASSWORD_PADDING)[:32]  # 1
-        hash = md5.md5(password)  # 2
-        hash.update(O)  # 3
-        hash.update(struct.pack('<l', P))  # 4
-        hash.update(docid[0])  # 5
-        if 4 <= R:
-            # 6
-            raise PDFNotImplementedError('Revision 4 encryption is currently unsupported')
-        if 3 <= R:
-            # 8
-            for _ in xrange(50):
-                hash = md5.md5(hash.digest()[:length/8])
-        key = hash.digest()[:length/8]
-        if R == 2:
-            # Algorithm 3.4
-            u1 = Arcfour(key).process(self.PASSWORD_PADDING)
-        elif R == 3:
-            # Algorithm 3.5
-            hash = md5.md5(self.PASSWORD_PADDING)  # 2
-            hash.update(docid[0])  # 3
-            x = Arcfour(key).process(hash.digest()[:16])  # 4
-            for i in xrange(1, 19+1):
-                k = ''.join(chr(ord(c) ^ i) for c in key)
-                x = Arcfour(k).process(x)
-            u1 = x+x  # 32bytes total
-        if R == 2:
-            is_authenticated = (u1 == U)
-        else:
-            is_authenticated = (u1[:16] == U[:16])
-        if not is_authenticated:
-            raise PDFPasswordIncorrect
-        self.decrypt_key = key
-        self.decipher = self.decrypt_rc4  # XXX may be AES
+        handler = factory(docid, param, password)
+        self.decipher = handler.decrypt
+        self.is_printable = handler.is_printable()
+        self.is_modifiable = handler.is_modifiable()
+        self.is_extractable = handler.is_extractable()
+        self._parser.fallback = False # need to read streams with exact length
         return
-
-    def decrypt_rc4(self, objid, genno, data):
-        key = self.decrypt_key + struct.pack('<L', objid)[:3]+struct.pack('<L', genno)[:2]
-        hash = md5.md5(key)
-        key = hash.digest()[:min(len(key), 16)]
-        return Arcfour(key).process(data)
 
     def _getobj_objstm(self, stream, index, objid):
         if stream.objid in self._parsed_objs:
@@ -468,6 +650,9 @@ class PDFDocument(object):
                         obj = self._getobj_objstm(stream, index, objid)
                     else:
                         obj = self._getobj_parse(index, objid)
+                        if self.decipher:
+                            obj = decipher_all(self.decipher, objid, genno, obj)
+
                     if isinstance(obj, PDFStream):
                         obj.set_objid(objid, genno)
                     break
@@ -479,8 +664,6 @@ class PDFDocument(object):
                 print >>sys.stderr, 'register: objid=%r: %r' % (objid, obj)
             if self.caching:
                 self._cached_objs[objid] = (obj, genno)
-        if self.decipher:
-            obj = decipher_all(self.decipher, objid, genno, obj)
         return obj
 
     def get_outlines(self):

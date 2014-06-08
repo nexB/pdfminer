@@ -12,39 +12,40 @@ def apply_png_predictor(pred, colors, columns, bitspercomponent, data):
     if bitspercomponent != 8:
         # unsupported
         raise ValueError(bitspercomponent)
-    nbytes = colors*columns*bitspercomponent/8
+    nbytes = colors*columns*bitspercomponent//8
     i = 0
     buf = ''
     line0 = '\x00' * columns
-    while i < len(data):
-        pred = data[i]
+    for i in xrange(0, len(data), nbytes+1):
+        ft = data[i]
         i += 1
         line1 = data[i:i+nbytes]
-        i += nbytes
-        if pred == '\x00':
+        line2 = ''
+        if ft == '\x00':
             # PNG none
-            buf += line1
-        elif pred == '\x01':
+            line2 += line1
+        elif ft == '\x01':
             # PNG sub (UNTESTED)
             c = 0
             for b in line1:
                 c = (c+ord(b)) & 255
-                buf += chr(c)
-        elif pred == '\x02':
+                line2 += chr(c)
+        elif ft == '\x02':
             # PNG up
             for (a, b) in zip(line0, line1):
                 c = (ord(a)+ord(b)) & 255
-                buf += chr(c)
-        elif pred == '\x03':
+                line2 += chr(c)
+        elif ft == '\x03':
             # PNG average (UNTESTED)
             c = 0
             for (a, b) in zip(line0, line1):
-                c = ((c+ord(a)+ord(b))/2) & 255
-                buf += chr(c)
+                c = ((c+ord(a)+ord(b))//2) & 255
+                line2 += chr(c)
         else:
             # unsupported
-            raise ValueError(pred)
-        line0 = line1
+            raise ValueError(ft)
+        buf += line2
+        line0 = line2
     return buf
 
 
@@ -77,6 +78,10 @@ def apply_matrix_norm((a, b, c, d, e, f), (p, q)):
 
 ##  Utility functions
 ##
+
+# isnumber
+def isnumber(x):
+    return isinstance(x, (int, long, float))
 
 # uniq
 def uniq(objs):
@@ -114,7 +119,7 @@ def fsplit(pred, objs):
 def drange(v0, v1, d):
     """Returns a discrete range."""
     assert v0 < v1
-    return xrange(int(v0)/d, int(v1+d)/d)
+    return xrange(int(v0)//d, int(v1+d)//d)
 
 
 # get_bound

@@ -10,6 +10,11 @@ It includes a PDF converter that can transform PDF files
 into other text formats (such as HTML). It has an extensible
 PDF parser that can be used for other purposes than text analysis.
 
+ * Webpage: https://euske.github.io/pdfminer/
+ * Download (PyPI): https://pypi.python.org/pypi/pdfminer/
+ * Demo WebApp: http://pdf2html.tabesugi.net:8080/
+
+
 Features
 --------
 
@@ -22,6 +27,7 @@ Features
  * Outline (TOC) extraction.
  * Tagged contents extraction.
  * Automatic layout analysis.
+
 
 How to Install
 --------------
@@ -36,6 +42,7 @@ How to Install
  * Do the following test:
 
     $ pdf2txt.py samples/simple1.pdf
+
 
 For CJK Languages
 -----------------
@@ -59,6 +66,7 @@ paste the following commands on a command line prompt:
     python tools\conv_cmap.py -c RKSJ=cp932 -c EUC=euc-jp -c UniJIS-UTF8=utf-8 pdfminer\cmap Adobe-Japan1 cmaprsrc\cid2code_Adobe_Japan1.txt
     python tools\conv_cmap.py -c KSC-EUC=euc-kr -c KSC-Johab=johab -c KSCms-UHC=cp949 -c UniKS-UTF8=utf-8 pdfminer\cmap Adobe-Korea1 cmaprsrc\cid2code_Adobe_Korea1.txt
     python setup.py install
+
 
 Command Line Tools
 ------------------
@@ -87,6 +95,21 @@ but it's also possible to extract some meaningful contents (e.g. images).
 
 (For details, refer to the html document.)
 
+
+API Changes
+-----------
+
+As of November 2013, there were a few changes made to the PDFMiner API
+prior to October 2013. This is the result of code restructuring.  Here
+is a list of the changes:
+
+ * PDFDocument class is moved to pdfdocument.py.
+ * PDFDocument class now takes a PDFParser object as an argument.
+   PDFDocument.set_parser() and PDFParser.set_document() is removed.
+ * PDFPage class is moved to pdfpage.py
+ * process_pdf function is implemented as a class method PDFPage.get_pages.
+
+
 TODO
 ----
 
@@ -97,13 +120,15 @@ TODO
  * Better documentation.
  * Crypt stream filter support.
 
+
 Related Projects
 ----------------
 
  * <a href="http://pybrary.net/pyPdf/">pyPdf</a>
  * <a href="http://www.foolabs.com/xpdf/">xpdf</a>
- * <a href="http://www.pdfbox.org/">pdfbox</a>
+ * <a href="http://pdfbox.apache.org/">pdfbox</a>
  * <a href="http://mupdf.com/">mupdf</a>
+
 
 Terms and Conditions
 --------------------

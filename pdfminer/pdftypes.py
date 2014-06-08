@@ -6,7 +6,7 @@ from runlength import rldecode
 from ccitt import ccittfaxdecode
 from psparser import PSException, PSObject
 from psparser import LIT, STRICT
-from utils import apply_png_predictor
+from utils import apply_png_predictor, isnumber
 
 LITERAL_CRYPT = LIT('Crypt')
 
@@ -25,22 +25,17 @@ LITERALS_DCT_DECODE = (LIT('DCTDecode'), LIT('DCT'))
 class PDFObject(PSObject):
     pass
 
-
 class PDFException(PSException):
     pass
-
 
 class PDFTypeError(PDFException):
     pass
 
-
 class PDFValueError(PDFException):
     pass
 
-
 class PDFObjectNotFound(PDFException):
     pass
-
 
 class PDFNotImplementedError(PDFException):
     pass
@@ -131,7 +126,7 @@ def float_value(x):
 
 def num_value(x):
     x = resolve1(x)
-    if not (isinstance(x, int) or isinstance(x, float)):
+    if not isnumber(x):
         if STRICT:
             raise PDFTypeError('Int or Float required: %r' % x)
         return 0
@@ -149,7 +144,7 @@ def str_value(x):
 
 def list_value(x):
     x = resolve1(x)
-    if not (isinstance(x, list) or isinstance(x, tuple)):
+    if not isinstance(x, (list, tuple)):
         if STRICT:
             raise PDFTypeError('List required: %r' % x)
         return []
@@ -229,7 +224,7 @@ class PDFStream(PDFObject):
         data = self.rawdata
         if self.decipher:
             # Handle encryption
-            data = self.decipher(self.objid, self.genno, data)
+            data = self.decipher(self.objid, self.genno, data, self.attrs)
         filters = self.get_filters()
         if not filters:
             self.data = data
@@ -255,6 +250,10 @@ class PDFStream(PDFObject):
                 data = rldecode(data)
             elif f in LITERALS_CCITTFAX_DECODE:
                 data = ccittfaxdecode(data, params)
+            elif f in LITERALS_DCT_DECODE:
+                # This is probably a JPG stream - it does not need to be decoded twice.
+                # Just return the stream to the user.
+                pass
             elif f == LITERAL_CRYPT:
                 # not yet..
                 raise PDFNotImplementedError('/Crypt filter is unsupported')

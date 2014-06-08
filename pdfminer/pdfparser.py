@@ -112,10 +112,12 @@ class PDFParser(PSStackParser):
                 if 'endstream' in line:
                     i = line.index('endstream')
                     objlen += i
-                    data += line[:i]
+                    if self.fallback:
+                        data += line[:i]
                     break
                 objlen += len(line)
-                data += line
+                if self.fallback:
+                    data += line
             self.seek(pos+objlen)
             # XXX limit objlen not to exceed object boundary
             if 2 <= self.debug:
@@ -151,6 +153,7 @@ class PDFStreamParser(PDFParser):
         self.add_results(*self.popall())
         return
 
+    KEYWORD_OBJ = KWD('obj')
     def do_keyword(self, pos, token):
         if token is self.KEYWORD_R:
             # reference to indirect object
@@ -161,6 +164,12 @@ class PDFStreamParser(PDFParser):
                 self.push((pos, obj))
             except PSSyntaxError:
                 pass
+            return
+        elif token in (self.KEYWORD_OBJ, self.KEYWORD_ENDOBJ):
+            if STRICT:
+                # See PDF Spec 3.4.6: Only the object values are stored in the
+                # stream; the obj and endobj keywords are not used.
+                raise PDFSyntaxError("Keyword endobj found in stream")
             return
         # others
         self.push((pos, token))

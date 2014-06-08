@@ -13,6 +13,7 @@ from pdfminer.pdfdocument import PDFDocument, PDFNoOutlines
 from pdfminer.pdftypes import PDFObjectNotFound, PDFValueError
 from pdfminer.pdftypes import PDFStream, PDFObjRef, resolve1, stream_value
 from pdfminer.pdfpage import PDFPage
+from pdfminer.utils import isnumber
 
 
 ESC_PAT = re.compile(r'[\000-\037&<>()"\042\047\134\177-\377]')
@@ -75,7 +76,7 @@ def dumpxml(out, obj, codec=None):
         out.write('<literal>%s</literal>' % obj.name)
         return
 
-    if isinstance(obj, int) or isinstance(obj, float):
+    if isnumber(obj):
         out.write('<number>%s</number>' % obj)
         return
 
@@ -91,9 +92,12 @@ def dumptrailers(out, doc):
 
 # dumpallobjs
 def dumpallobjs(out, doc, codec=None):
+    visited = set()
     out.write('<pdf>')
     for xref in doc.xrefs:
         for objid in xref.get_objids():
+            if objid in visited: continue
+            visited.add(objid)
             try:
                 obj = doc.getobj(objid)
                 if obj is None: continue
@@ -111,8 +115,7 @@ def dumpoutline(outfp, fname, objids, pagenos, password='',
                 dumpall=False, codec=None, extractdir=None):
     fp = file(fname, 'rb')
     parser = PDFParser(fp)
-    doc = PDFDocument(parser)
-    doc.initialize(password)
+    doc = PDFDocument(parser, password)
     pages = dict( (page.pageid, pageno) for (pageno,page)
                   in enumerate(PDFPage.create_pages(doc)) )
     def resolve_dest(dest):
@@ -182,9 +185,7 @@ def extractembedded(outfp, fname, objids, pagenos, password='',
 
     fp = file(fname, 'rb')
     parser = PDFParser(fp)
-    doc = PDFDocument(parser)
-    doc.initialize(password)
-
+    doc = PDFDocument(parser, password)
     for xref in doc.xrefs:
         for objid in xref.get_objids():
             obj = doc.getobj(objid)
@@ -197,8 +198,7 @@ def dumppdf(outfp, fname, objids, pagenos, password='',
             dumpall=False, codec=None, extractdir=None):
     fp = file(fname, 'rb')
     parser = PDFParser(fp)
-    doc = PDFDocument(parser)
-    doc.initialize(password)
+    doc = PDFDocument(parser, password)
     if objids:
         for objid in objids:
             obj = doc.getobj(objid)

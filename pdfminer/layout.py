@@ -215,7 +215,7 @@ class LTChar(LTComponent, LTText):
             width = font.get_width() * fontsize
             (vx, vy) = textdisp
             if vx is None:
-                vx = width/2
+                vx = width//2
             else:
                 vx = vx * fontsize * .001
             vy = (1000 - vy) * fontsize * .001
@@ -622,10 +622,8 @@ class LTLayoutContainer(LTContainer):
             if c == 0 and isany(obj1, obj2):
                 dists.append((1, d, obj1, obj2))
                 continue
-            if (isinstance(obj1, LTTextBoxVertical) or
-                isinstance(obj1, LTTextGroupTBRL) or
-                isinstance(obj2, LTTextBoxVertical) or
-                isinstance(obj2, LTTextGroupTBRL)):
+            if (isinstance(obj1, (LTTextBoxVertical, LTTextGroupTBRL)) or
+                isinstance(obj2, (LTTextBoxVertical, LTTextGroupTBRL))):
                 group = LTTextGroupTBRL([obj1, obj2])
             else:
                 group = LTTextGroupLRTB([obj1, obj2])

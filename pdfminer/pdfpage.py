@@ -7,6 +7,7 @@ from pdftypes import int_value, list_value, dict_value
 from pdfparser import PDFParser
 from pdfdocument import PDFDocument
 from pdfdocument import PDFEncryptionError
+from pdfdocument import PDFTextExtractionNotAllowed
 
 # some predefined literals and keywords.
 LITERAL_PAGE = LIT('Page')
@@ -110,9 +111,6 @@ class PDFPage(object):
                         pass
         return
 
-    class PDFTextExtractionNotAllowed(PDFEncryptionError):
-        pass
-
     @classmethod
     def get_pages(klass, fp,
                   pagenos=None, maxpages=0, password='',
@@ -120,13 +118,10 @@ class PDFPage(object):
         # Create a PDF parser object associated with the file object.
         parser = PDFParser(fp)
         # Create a PDF document object that stores the document structure.
-        doc = PDFDocument(parser, caching=caching)
-        # Supply the document password for initialization.
-        # (If no password is set, give an empty string.)
-        doc.initialize(password)
+        doc = PDFDocument(parser, password=password, caching=caching)
         # Check if the document allows text extraction. If not, abort.
         if check_extractable and not doc.is_extractable:
-            raise klass.PDFTextExtractionNotAllowed('Text extraction is not allowed: %r' % fp)
+            raise PDFTextExtractionNotAllowed('Text extraction is not allowed: %r' % fp)
         # Process each page contained in the document.
         for (pageno, page) in enumerate(klass.create_pages(doc)):
             if pagenos and (pageno not in pagenos):

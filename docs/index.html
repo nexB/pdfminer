@@ -9,7 +9,7 @@
 
 <div align=right class=lastmod>
 <!-- hhmts start -->
-Last Modified: Sat Oct 26 15:03:35 UTC 2013
+Last Modified: Mon May 19 14:21:09 UTC 2014
 <!-- hhmts end -->
 </div>
 
@@ -240,7 +240,7 @@ represented as a space, but indicated by the positioning of each word.
 <p>
 Each value is specified not as an actual length, but as a proportion of
 the length to the size of each character in question. The default values 
-are M = 1.0, L = 0.3, and W = 0.2, respectively.
+are M = 2.0, L = 0.5, and W = 0.1, respectively.
 <table style="border:2px gray solid; margin: 10px; padding: 10px;"><tr>
 <td style="border-right:1px red solid" align=right>&rarr;</td>
 <td style="border-left:1px red solid" colspan="4" align=left>&larr; <em><font color="red">M</font></em></td>
@@ -263,6 +263,12 @@ are M = 1.0, L = 0.3, and W = 0.2, respectively.
 </td>
 <td style="border-top:1px blue solid" align=right>&uarr;</td>
 </tr></table>
+<p>
+<dt> <code>-F <em>boxes_flow</em></code> 
+<dd> Specifies how much a horizontal and vertical position of a text matters
+when determining a text order. The value should be within the range of 
+-1.0 (only horizontal position matters) to +1.0 (only vertical position matters).
+The default value is 0.5.
 <p>
 <dt> <code>-C</code> 
 <dd> Suppress object caching. 
@@ -368,7 +374,25 @@ no stream header is displayed for the ease of saving it to a file.
 
 <h2><a name="changes">Changes</a></h2>
 <ul>
-<li> 2013/10/22: Sudden resurge of interests. 
+<li> 2014/03/28: Further bugfixes.
+<li> 2014/03/24: Bugfixes and improvements for fauly PDFs.<br>
+API changes:
+ <ul>
+ <li> <code>PDFDocument.initialize()</code> method is removed and no longer needed.
+  A password is given as an argument of a PDFDocument constructor.
+ </ul>
+<li> 2013/11/13: Bugfixes and minor improvements.<br>
+As of November 2013, there were a few changes made to the PDFMiner API
+prior to October 2013. This is the result of code restructuring.  Here
+is a list of the changes:
+ <ul>
+ <li> <code>PDFDocument</code> class is moved to <code>pdfdocument.py</code>.
+ <li> <code>PDFDocument</code> class now takes a <code>PDFParser</code> object as an argument.
+ <li> <code>PDFDocument.set_parser()</code> and <code>PDFParser.set_document()</code> is removed.
+ <li> <code>PDFPage</code> class is moved to <code>pdfpage.py</code>.
+ <li> <code>process_pdf</code> function is implemented as <code>PDFPage.get_pages</code>.
+</ul>
+<li> 2013/10/22: Sudden resurge of interests. API changes.
 Incorporated a lot of patches and robust handling of broken PDFs.
 <li> 2011/05/15: Speed improvements for layout analysis.
 <li> 2011/05/15: API changes. <code>LTText.get_text()</code> is added.
