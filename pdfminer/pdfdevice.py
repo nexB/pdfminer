@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-from utils import mult_matrix, translate_matrix
-from utils import enc, bbox2str, isnumber
-from pdffont import PDFUnicodeNotDefined
+from .utils import mult_matrix
+from .utils import translate_matrix
+from .utils import enc
+from .utils import bbox2str
+from .utils import isnumber
+from .pdffont import PDFUnicodeNotDefined
 
 
 ##  PDFDevice
 ##
 class PDFDevice(object):
-
-    debug = 0
 
     def __init__(self, rsrcmgr):
         self.rsrcmgr = rsrcmgr
@@ -81,8 +82,9 @@ class PDFTextDevice(PDFDevice):
                 scaling, charspace, wordspace, rise, dxscale)
         return
 
-    def render_string_horizontal(self, seq, matrix, (x, y),
+    def render_string_horizontal(self, seq, matrix, pos,
                                  font, fontsize, scaling, charspace, wordspace, rise, dxscale):
+        (x, y) = pos
         needcharspace = False
         for obj in seq:
             if isnumber(obj):
@@ -99,8 +101,9 @@ class PDFTextDevice(PDFDevice):
                     needcharspace = True
         return (x, y)
 
-    def render_string_vertical(self, seq, matrix, (x, y),
+    def render_string_vertical(self, seq, matrix, pos,
                                font, fontsize, scaling, charspace, wordspace, rise, dxscale):
+        (x, y) = pos
         needcharspace = False
         for obj in seq:
             if isnumber(obj):
@@ -125,11 +128,10 @@ class PDFTextDevice(PDFDevice):
 ##
 class TagExtractor(PDFDevice):
 
-    def __init__(self, rsrcmgr, outfp, codec='utf-8', debug=0):
+    def __init__(self, rsrcmgr, outfp, codec='utf-8'):
         PDFDevice.__init__(self, rsrcmgr)
         self.outfp = outfp
         self.codec = codec
-        self.debug = debug
         self.pageno = 0
         self._stack = []
         return

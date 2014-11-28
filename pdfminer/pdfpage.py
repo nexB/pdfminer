@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-import sys
-from psparser import LIT
-from pdftypes import PDFObjectNotFound
-from pdftypes import resolve1
-from pdftypes import int_value, list_value, dict_value
-from pdfparser import PDFParser
-from pdfdocument import PDFDocument
-from pdfdocument import PDFEncryptionError
-from pdfdocument import PDFTextExtractionNotAllowed
+import logging
+from .psparser import LIT
+from .pdftypes import PDFObjectNotFound
+from .pdftypes import resolve1
+from .pdftypes import int_value
+from .pdftypes import list_value
+from .pdftypes import dict_value
+from .pdfparser import PDFParser
+from .pdfdocument import PDFDocument
+from .pdfdocument import PDFTextExtractionNotAllowed
 
 # some predefined literals and keywords.
 LITERAL_PAGE = LIT('Page')
@@ -49,7 +50,7 @@ class PDFPage(object):
         self.pageid = pageid
         self.attrs = dict_value(attrs)
         self.lastmod = resolve1(self.attrs.get('LastModified'))
-        self.resources = resolve1(self.attrs['Resources'])
+        self.resources = resolve1(self.attrs.get('Resources', dict()))
         self.mediabox = resolve1(self.attrs['MediaBox'])
         if 'CropBox' in self.attrs:
             self.cropbox = resolve1(self.attrs['CropBox'])
@@ -73,7 +74,7 @@ class PDFPage(object):
     INHERITABLE_ATTRS = set(['Resources', 'MediaBox', 'CropBox', 'Rotate'])
 
     @classmethod
-    def create_pages(klass, document, debug=0):
+    def create_pages(klass, document):
         def search(obj, parent):
             if isinstance(obj, int):
                 objid = obj
@@ -85,14 +86,12 @@ class PDFPage(object):
                 if k in klass.INHERITABLE_ATTRS and k not in tree:
                     tree[k] = v
             if tree.get('Type') is LITERAL_PAGES and 'Kids' in tree:
-                if 1 <= debug:
-                    print >>sys.stderr, 'Pages: Kids=%r' % tree['Kids']
+                logging.info('Pages: Kids=%r' % tree['Kids'])
                 for c in list_value(tree['Kids']):
                     for x in search(c, tree):
                         yield x
             elif tree.get('Type') is LITERAL_PAGE:
-                if 1 <= debug:
-                    print >>sys.stderr, 'Page: %r' % tree
+                logging.info('Page: %r' % tree)
                 yield (objid, tree)
         pages = False
         if 'Pages' in document.catalog:
@@ -113,7 +112,7 @@ class PDFPage(object):
 
     @classmethod
     def get_pages(klass, fp,
-                  pagenos=None, maxpages=0, password='',
+                  pagenos=None, maxpages=0, password=b'',
                   caching=True, check_extractable=True):
         # Create a PDF parser object associated with the file object.
         parser = PDFParser(fp)

@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 import zlib
-from lzw import lzwdecode
-from ascii85 import ascii85decode, asciihexdecode
-from runlength import rldecode
-from ccitt import ccittfaxdecode
-from psparser import PSException, PSObject
-from psparser import LIT, STRICT
-from utils import apply_png_predictor, isnumber
+from .lzw import lzwdecode
+from .ascii85 import ascii85decode
+from .ascii85 import asciihexdecode
+from .runlength import rldecode
+from .ccitt import ccittfaxdecode
+from .psparser import PSException
+from .psparser import PSObject
+from .psparser import LIT
+from .psparser import STRICT
+from .utils import apply_png_predictor
+from .utils import isnumber
+
 
 LITERAL_CRYPT = LIT('Crypt')
 
@@ -213,11 +218,14 @@ class PDFStream(PDFObject):
 
     def get_filters(self):
         filters = self.get_any(('F', 'Filter'))
+        params = self.get_any(('DP', 'DecodeParms', 'FDecodeParms'), {})
         if not filters:
             return []
-        if isinstance(filters, list):
-            return filters
-        return [filters]
+        if not isinstance(filters, list):
+            filters = [filters]
+        if not isinstance(params, list):
+            params = [params]
+        return zip(filters, params)
 
     def decode(self):
         assert self.data is None and self.rawdata is not None
@@ -230,16 +238,15 @@ class PDFStream(PDFObject):
             self.data = data
             self.rawdata = None
             return
-        for f in filters:
-            params = self.get_any(('DP', 'DecodeParms', 'FDecodeParms'), {})
+        for (f,params) in filters:
             if f in LITERALS_FLATE_DECODE:
                 # will get errors if the document is encrypted.
                 try:
                     data = zlib.decompress(data)
-                except zlib.error, e:
+                except zlib.error as e:
                     if STRICT:
                         raise PDFException('Invalid zlib bytes: %r, %r' % (e, data))
-                    data = ''
+                    data = b''
             elif f in LITERALS_LZW_DECODE:
                 data = lzwdecode(data)
             elif f in LITERALS_ASCII85_DECODE:

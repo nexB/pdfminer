@@ -1,27 +1,35 @@
 #!/usr/bin/env python
-import sys
 import re
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
-from cmapdb import CMapDB, CMap
-from psparser import PSTypeError, PSEOF
-from psparser import PSKeyword, literal_name, keyword_name
-from psparser import PSStackParser
-from psparser import LIT, KWD, STRICT
-from pdftypes import PDFException, PDFStream, PDFObjRef
-from pdftypes import resolve1
-from pdftypes import list_value, dict_value, stream_value
-from pdffont import PDFFontError
-from pdffont import PDFType1Font, PDFTrueTypeFont, PDFType3Font
-from pdffont import PDFCIDFont
-from pdfcolor import PDFColorSpace
-from pdfcolor import PREDEFINED_COLORSPACE
-from pdfcolor import LITERAL_DEVICE_GRAY, LITERAL_DEVICE_RGB
-from pdfcolor import LITERAL_DEVICE_CMYK
-from utils import choplist
-from utils import mult_matrix, MATRIX_IDENTITY
+import logging
+from io import BytesIO
+from .cmapdb import CMapDB
+from .cmapdb import CMap
+from .psparser import PSTypeError
+from .psparser import PSEOF
+from .psparser import PSKeyword
+from .psparser import literal_name
+from .psparser import keyword_name
+from .psparser import PSStackParser
+from .psparser import LIT
+from .psparser import KWD
+from .psparser import STRICT
+from .pdftypes import PDFException
+from .pdftypes import PDFStream
+from .pdftypes import PDFObjRef
+from .pdftypes import resolve1
+from .pdftypes import list_value
+from .pdftypes import dict_value
+from .pdftypes import stream_value
+from .pdffont import PDFFontError
+from .pdffont import PDFType1Font
+from .pdffont import PDFTrueTypeFont
+from .pdffont import PDFType3Font
+from .pdffont import PDFCIDFont
+from .pdfcolor import PDFColorSpace
+from .pdfcolor import PREDEFINED_COLORSPACE
+from .utils import choplist
+from .utils import mult_matrix
+from .utils import MATRIX_IDENTITY
 
 
 ##  Exceptions
@@ -130,7 +138,6 @@ class PDFResourceManager(object):
     such as fonts and images so that large objects are not
     allocated multiple times.
     """
-    debug = 0
 
     def __init__(self, caching=True):
         self.caching = caching
@@ -160,8 +167,7 @@ class PDFResourceManager(object):
         if objid and objid in self._cached_fonts:
             font = self._cached_fonts[objid]
         else:
-            if 2 <= self.debug:
-                print >>sys.stderr, 'get_font: create: objid=%r, spec=%r' % (objid, spec)
+            logging.info('get_font: create: objid=%r, spec=%r' % (objid, spec))
             if STRICT:
                 if spec['Type'] is not LITERAL_FONT:
                     raise PDFFontError('Type is not /Font')
@@ -219,7 +225,7 @@ class PDFContentParser(PSStackParser):
                 self.istream += 1
             else:
                 raise PSEOF('Unexpected EOF, file truncated?')
-            self.fp = StringIO(strm.get_data())
+            self.fp = BytesIO(strm.get_data())
         return
 
     def seek(self, pos):
@@ -240,10 +246,10 @@ class PDFContentParser(PSStackParser):
         self.charpos = 0
         return
 
-    def get_inline_data(self, pos, target='EI'):
+    def get_inline_data(self, pos, target=b'EI'):
         self.seek(pos)
         i = 0
-        data = ''
+        data = b''
         while i <= len(target):
             self.fillbuf()
             if i:
@@ -267,16 +273,16 @@ class PDFContentParser(PSStackParser):
                     data += self.buf[self.charpos:]
                     self.charpos = len(self.buf)
         data = data[:-(len(target)+1)]  # strip the last part
-        data = re.sub(r'(\x0d\x0a|[\x0d\x0a])$', '', data)
+        data = re.sub(br'(\x0d\x0a|[\x0d\x0a])$', b'', data)
         return (pos, data)
 
     def flush(self):
         self.add_results(*self.popall())
         return
 
-    KEYWORD_BI = KWD('BI')
-    KEYWORD_ID = KWD('ID')
-    KEYWORD_EI = KWD('EI')
+    KEYWORD_BI = KWD(b'BI')
+    KEYWORD_ID = KWD(b'ID')
+    KEYWORD_EI = KWD(b'EI')
 
     def do_keyword(self, pos, token):
         if token is self.KEYWORD_BI:
@@ -288,7 +294,7 @@ class PDFContentParser(PSStackParser):
                 if len(objs) % 2 != 0:
                     raise PSTypeError('Invalid dictionary construct: %r' % objs)
                 d = dict((literal_name(k), v) for (k, v) in choplist(2, objs))
-                (pos, data) = self.get_inline_data(pos+len('ID '))
+                (pos, data) = self.get_inline_data(pos+len(b'ID '))
                 obj = PDFStream(d, data)
                 self.push((pos, obj))
                 self.push((pos, self.KEYWORD_EI))
@@ -336,8 +342,8 @@ class PDFPageInterpreter(object):
             else:
                 return PREDEFINED_COLORSPACE.get(name)
         for (k, v) in dict_value(resources).iteritems():
-            if 2 <= self.debug:
-                print >>sys.stderr, 'Resource: %r: %r' % (k, v)
+            if self.debug:
+                logging.debug('Resource: %r: %r' % (k, v))
             if k == 'Font':
                 for (fontid, spec) in dict_value(v).iteritems():
                     objid = None
@@ -793,8 +799,7 @@ class PDFPageInterpreter(object):
             if STRICT:
                 raise PDFInterpreterError('Undefined xobject id: %r' % xobjid)
             return
-        if 1 <= self.debug:
-            print >>sys.stderr, 'Processing xobj: %r' % xobj
+        logging.info('Processing xobj: %r' % xobj)
         subtype = xobj.get('Subtype')
         if subtype is LITERAL_FORM and 'BBox' in xobj:
             interpreter = self.dup()
@@ -817,8 +822,7 @@ class PDFPageInterpreter(object):
         return
 
     def process_page(self, page):
-        if 1 <= self.debug:
-            print >>sys.stderr, 'Processing page: %r' % page
+        logging.info('Processing page: %r' % page)
         (x0, y0, x1, y1) = page.mediabox
         if page.rotate == 90:
             ctm = (0, -1, 1, 0, -y0, x1)
@@ -837,9 +841,8 @@ class PDFPageInterpreter(object):
     #   Render the content streams.
     #   This method may be called recursively.
     def render_contents(self, resources, streams, ctm=MATRIX_IDENTITY):
-        if 1 <= self.debug:
-            print >>sys.stderr, ('render_contents: resources=%r, streams=%r, ctm=%r' %
-                                 (resources, streams, ctm))
+        logging.info('render_contents: resources=%r, streams=%r, ctm=%r' %
+                     (resources, streams, ctm))
         self.init_resources(resources)
         self.init_state(ctm)
         self.execute(list_value(streams))
@@ -864,13 +867,13 @@ class PDFPageInterpreter(object):
                     nargs = func.func_code.co_argcount-1
                     if nargs:
                         args = self.pop(nargs)
-                        if 2 <= self.debug:
-                            print >>sys.stderr, 'exec: %s %r' % (name, args)
+                        if self.debug:
+                            logging.debug('exec: %s %r' % (name, args))
                         if len(args) == nargs:
                             func(*args)
                     else:
-                        if 2 <= self.debug:
-                            print >>sys.stderr, 'exec: %s' % (name)
+                        if self.debug:
+                            logging.debug('exec: %s' % name)
                         func()
                 else:
                     if STRICT:

@@ -1,9 +1,12 @@
 #!/usr/bin/env python
-import cStringIO
 import struct
-import os, os.path
-from pdftypes import LITERALS_DCT_DECODE
-from pdfcolor import LITERAL_DEVICE_GRAY, LITERAL_DEVICE_RGB, LITERAL_DEVICE_CMYK
+import os
+import os.path
+from io import BytesIO
+from .pdftypes import LITERALS_DCT_DECODE
+from .pdfcolor import LITERAL_DEVICE_GRAY
+from .pdfcolor import LITERAL_DEVICE_RGB
+from .pdfcolor import LITERAL_DEVICE_CMYK
 
 
 def align32(x):
@@ -32,7 +35,7 @@ class BMPWriter(object):
         headersize = 14+40+ncols*4
         info = struct.pack('<IiiHHIIIIII', 40, self.width, self.height, 1, self.bits, 0, self.datasize, 0, 0, ncols, 0)
         assert len(info) == 40, len(info)
-        header = struct.pack('<ccIHHI', 'B', 'M', headersize+self.datasize, 0, 0, headersize)
+        header = struct.pack('<ccIHHI', b'B', b'M', headersize+self.datasize, 0, 0, headersize)
         assert len(header) == 14, len(header)
         self.fp.write(header)
         self.fp.write(info)
@@ -68,7 +71,7 @@ class ImageWriter(object):
         stream = image.stream
         filters = stream.get_filters()
         (width, height) = image.srcsize
-        if len(filters) == 1 and filters[0] in LITERALS_DCT_DECODE:
+        if len(filters) == 1 and filters[0][0] in LITERALS_DCT_DECODE:
             ext = '.jpg'
         elif (image.bits == 1 or
               image.bits == 8 and image.colorspace in (LITERAL_DEVICE_RGB, LITERAL_DEVICE_GRAY)):
@@ -83,7 +86,7 @@ class ImageWriter(object):
             if LITERAL_DEVICE_CMYK in image.colorspace:
                 from PIL import Image
                 from PIL import ImageChops
-                ifp = cStringIO.StringIO(raw_data)
+                ifp = BytesIO(raw_data)
                 i = Image.open(ifp)
                 i = ImageChops.invert(i)
                 i = i.convert('RGB')

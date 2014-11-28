@@ -104,7 +104,7 @@ def dumpallobjs(out, doc, codec=None):
                 out.write('<object id="%d">\n' % objid)
                 dumpxml(out, obj, codec=codec)
                 out.write('\n</object>\n\n')
-            except PDFObjectNotFound, e:
+            except PDFObjectNotFound as e:
                 print >>sys.stderr, 'not found: %r' % e
     dumptrailers(out, doc)
     out.write('</pdf>')
@@ -226,7 +226,7 @@ def dumppdf(outfp, fname, objids, pagenos, password='',
 def main(argv):
     import getopt
     def usage():
-        print 'usage: %s [-d] [-a] [-p pageid] [-P password] [-r|-b|-t] [-T] [-E directory] [-i objid] file ...' % argv[0]
+        print ('usage: %s [-d] [-a] [-p pageid] [-P password] [-r|-b|-t] [-T] [-E directory] [-i objid] file ...' % argv[0])
         return 100
     try:
         (opts, args) = getopt.getopt(argv[1:], 'dap:P:rbtTE:i:')

@@ -1,6 +1,8 @@
 PDFMiner
 ========
 
+[![Build Status](https://travis-ci.org/euske/pdfminer.svg?branch=master)](https://travis-ci.org/euske/pdfminer)
+
 PDFMiner is a tool for extracting information from PDF documents.
 Unlike other PDF-related tools, it focuses entirely on getting 
 and analyzing text data. PDFMiner allows one to obtain
@@ -32,7 +34,7 @@ Features
 How to Install
 --------------
 
- * Install Python 2.4 or newer. (**Python 3 is not supported.**)
+ * Install Python 2.6 or newer. (**Python 3 is not supported.**)
  * Download the source code.
  * Unpack it.
  * Run `setup.py`:
@@ -135,7 +137,7 @@ Terms and Conditions
 
 (This is so-called MIT/X License)
 
-Copyright (c) 2004-2013  Yusuke Shinyama <yusuke at cs dot nyu dot edu>
+Copyright (c) 2004-2014  Yusuke Shinyama <yusuke at cs dot nyu dot edu>
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation

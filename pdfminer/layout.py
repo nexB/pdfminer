@@ -1,6 +1,13 @@
 #!/usr/bin/env python
-from utils import INF, Plane, get_bound, uniq, csort, fsplit
-from utils import bbox2str, matrix2str, apply_matrix_pt
+from .utils import INF
+from .utils import Plane
+from .utils import get_bound
+from .utils import uniq
+from .utils import csort
+from .utils import fsplit
+from .utils import bbox2str
+from .utils import matrix2str
+from .utils import apply_matrix_pt
 
 
 ##  IndexAssigner
@@ -81,14 +88,25 @@ class LTComponent(LTItem):
         return ('<%s %s>' %
                 (self.__class__.__name__, bbox2str(self.bbox)))
 
-    def set_bbox(self, (x0, y0, x1, y1)):
+    # Disable comparison.
+    def __lt__(self, _):
+        raise ValueError
+    def __le__(self, _):
+        raise ValueError
+    def __gt__(self, _):
+        raise ValueError
+    def __ge__(self, _):
+        raise ValueError
+
+    def set_bbox(self, bbox):
+        (x0, y0, x1, y1) = bbox
         self.x0 = x0
         self.y0 = y0
         self.x1 = x1
         self.y1 = y1
         self.width = x1-x0
         self.height = y1-y0
-        self.bbox = (x0, y0, x1, y1)
+        self.bbox = bbox
         return
 
     def is_empty(self):
@@ -158,7 +176,8 @@ class LTLine(LTCurve):
 ##
 class LTRect(LTCurve):
 
-    def __init__(self, linewidth, (x0, y0, x1, y1)):
+    def __init__(self, linewidth, bbox):
+        (x0, y0, x1, y1) = bbox
         LTCurve.__init__(self, linewidth, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
         return
 
@@ -215,7 +234,7 @@ class LTChar(LTComponent, LTText):
             width = font.get_width() * fontsize
             (vx, vy) = textdisp
             if vx is None:
-                vx = width//2
+                vx = width * 0.5
             else:
                 vx = vx * fontsize * .001
             vy = (1000 - vy) * fontsize * .001
@@ -607,6 +626,11 @@ class LTLayoutContainer(LTContainer):
             y1 = max(obj1.y1, obj2.y1)
             objs = set(plane.find((x0, y0, x1, y1)))
             return objs.difference((obj1, obj2))
+
+        def key_obj(t):
+            (c,d,_,_) = t
+            return (c,d)
+        
         # XXX this still takes O(n^2)  :(
         dists = []
         for i in xrange(len(boxes)):
@@ -614,7 +638,8 @@ class LTLayoutContainer(LTContainer):
             for j in xrange(i+1, len(boxes)):
                 obj2 = boxes[j]
                 dists.append((0, dist(obj1, obj2), obj1, obj2))
-        dists.sort()
+        # We could use dists.sort(), but it would randomize the test result.
+        dists = csort(dists, key=key_obj)
         plane = Plane(self.bbox)
         plane.extend(boxes)
         while dists:
@@ -629,11 +654,11 @@ class LTLayoutContainer(LTContainer):
                 group = LTTextGroupLRTB([obj1, obj2])
             plane.remove(obj1)
             plane.remove(obj2)
-            # this line is optimized -- don't change without profiling
-            dists = [n for n in dists if n[2] in plane._objs and n[3] in plane._objs]
+            dists = [ (c,d,obj1,obj2) for (c,d,obj1,obj2) in dists
+                      if (obj1 in plane and obj2 in plane) ]
             for other in plane:
                 dists.append((0, dist(group, other), group, other))
-            dists.sort()
+            dists = csort(dists, key=key_obj)
             plane.add(group)
         assert len(plane) == 1
         return list(plane)

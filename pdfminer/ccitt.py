@@ -425,7 +425,7 @@ class CCITTG4Parser(BitParser):
         return
 
     def output_line(self, y, bits):
-        print y, ''.join(str(b) for b in bits)
+        print (y, ''.join(str(b) for b in bits))
         return
 
     def _reset_line(self):
@@ -691,7 +691,7 @@ class CCITTFaxDecoder(CCITTG4Parser):
     def __init__(self, width, bytealign=False, reversed=False):
         CCITTG4Parser.__init__(self, width, bytealign=bytealign)
         self.reversed = reversed
-        self._buf = ''
+        self._buf = b''
         return
 
     def close(self):
@@ -723,12 +723,12 @@ def ccittfaxdecode(data, params):
 
 # test
 def main(argv):
-    import pygame
     if not argv[1:]:
         return unittest.main()
 
     class Parser(CCITTG4Parser):
         def __init__(self, width, bytealign=False):
+            import pygame
             CCITTG4Parser.__init__(self, width, bytealign=bytealign)
             self.img = pygame.Surface((self.width, 1000))
             return
@@ -742,6 +742,7 @@ def main(argv):
             return
 
         def close(self):
+            import pygame
             pygame.image.save(self.img, 'out.bmp')
             return
     for path in argv[1:]:

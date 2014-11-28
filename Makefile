@@ -19,8 +19,9 @@ clean:
 	-$(RM) -r build dist MANIFEST
 	-cd $(PACKAGE) && $(MAKE) clean
 	-cd tools && $(MAKE) clean
+	-cd samples && $(MAKE) clean
 
-distclean: clean test_clean cmap_clean
+distclean: clean cmap_clean
 
 sdist: distclean MANIFEST.in
 	$(PYTHON) setup.py sdist
@@ -54,6 +55,12 @@ $(CMAPDST)/to-unicode-Adobe-Korea1.pickle.gz: $(CMAPDST)
 		$(CMAPDST) Adobe-Korea1 $(CMAPSRC)/cid2code_Adobe_Korea1.txt
 
 test: cmap
+	$(PYTHON) -m doctest \
+		pdfminer/arcfour.py \
+		pdfminer/lzw.py \
+		pdfminer/ascii85.py \
+		pdfminer/runlength.py \
+		pdfminer/rijndael.py
+	$(PYTHON) -m pdfminer.ccitt
+	$(PYTHON) -m pdfminer.psparser
 	cd samples && $(MAKE) test
-test_clean:
-	-cd samples && $(MAKE) clean

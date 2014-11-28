@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 import sys
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle as pickle
 
 
 ##  CMapConverter
@@ -153,7 +156,7 @@ def main(argv):
     import os.path
 
     def usage():
-        print 'usage: %s [-c enc=codec] output_dir regname [cid2code.txt ...]' % argv[0]
+        print ('usage: %s [-c enc=codec] output_dir regname [cid2code.txt ...]' % argv[0])
         return 100
     try:
         (opts, args) = getopt.getopt(argv[1:], 'c:')
@@ -171,7 +174,7 @@ def main(argv):
 
     converter = CMapConverter(enc2codec)
     for path in args:
-        print >>sys.stderr, 'reading: %r...' % path
+        print ('reading: %r...' % path)
         fp = file(path)
         converter.load(fp)
         fp.close()
@@ -179,14 +182,14 @@ def main(argv):
     for enc in converter.get_encs():
         fname = '%s.pickle.gz' % enc
         path = os.path.join(outdir, fname)
-        print >>sys.stderr, 'writing: %r...' % path
+        print ('writing: %r...' % path)
         fp = gzip.open(path, 'wb')
         converter.dump_cmap(fp, enc)
         fp.close()
 
     fname = 'to-unicode-%s.pickle.gz' % regname
     path = os.path.join(outdir, fname)
-    print >>sys.stderr, 'writing: %r...' % path
+    print ('writing: %r...' % path)
     fp = gzip.open(path, 'wb')
     converter.dump_unicodemap(fp)
     fp.close()
